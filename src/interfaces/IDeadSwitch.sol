@@ -35,8 +35,20 @@ interface IDeadSwitch {
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
 
-    error NotVaultOwner();
+    error NotOwner();
     error NotBeneficiary();
+    error ZeroAmount();
+    error InsufficientBalance();
+    error InvalidPercentages();
+    error NoBeneficiaries();
+    error WillTimelocked(uint256 effectiveAt);
+    error CheckInNotExpired();
+    error WarningNotExpired();
+    error GracePeriodNotExpired();
+    error UnsupportedToken();
+    error ETHTransferFailed();
+    error InvalidConfig();
+    error WrongState(VaultState current, VaultState required);
 
     /*//////////////////////////////////////////////////////////////
                                    ENUMS
@@ -83,9 +95,25 @@ interface IDeadSwitch {
         uint256 streamDuration;
     }
 
+    struct VaultConfig {
+        uint256 checkInInterval; 
+        uint256 warningPeriod;   
+        uint256 gracePeriod;    
+    }
+
     /*//////////////////////////////////////////////////////////////
                                 EVENTS
     //////////////////////////////////////////////////////////////*/
+
+    event CheckedIn(address indexed owner, uint256 timestamp);
+    event Deposited(address indexed token, uint256 amount);
+    event Withdrawn(address indexed token, uint256 amount);
+    event StateChanged(VaultState indexed previousState, VaultState indexed newState, uint256 timestamp);
+    event WillUpdated(uint256 beneficiaryCount, uint256 effectiveAt);
+    event Distributed(address indexed beneficiary, address indexed token, uint256 amount, DistributionType distributionType);
+    event DepositedToYield(address indexed token, uint256 amount);
+    event WithdrawnFromYield(address indexed token, uint256 amount);
+    event DistributionCancelled(uint256 timestamp);
 
     /*//////////////////////////////////////////////////////////////
                             EXTERNAL FUNCTIONS
