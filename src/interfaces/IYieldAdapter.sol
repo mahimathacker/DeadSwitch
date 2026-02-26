@@ -2,17 +2,27 @@
 pragma solidity ^0.8.28;
 
 interface IYieldAdapter {
+    /*//////////////////////////////////////////////////////////////
+                                   ERRORS
+      //////////////////////////////////////////////////////////////*/
 
     error OnlyVault();
     error TokenNotSupported();
     error AaveOperationFailed();
 
+    /*//////////////////////////////////////////////////////////////
+                                   EVENTS
+       //////////////////////////////////////////////////////////////*/
 
     event SuppliedToAave(address indexed token, uint256 amount);
     event WithdrawnFromAave(address indexed token, uint256 amount);
 
+    /*//////////////////////////////////////////////////////////////
+                              EXTERNAL FUNCTIONS
+      //////////////////////////////////////////////////////////////*/
 
-  /** @notice Deposits tokens into Aave V3 lending pool to earn yield on behalf of the vault
+    /**
+     * @notice Deposits tokens into Aave V3 lending pool to earn yield on behalf of the vault
      * @dev Calls pool.supply() on Aave V3
      * The vault must have approved this adapter to spend the tokens before calling
      * @param token The ERC-20 token address to supply to Aave
@@ -31,7 +41,6 @@ interface IYieldAdapter {
 
     function withdrawFromAave(address token, uint256 amount) external returns (uint256);
 
-
     /**
      * @notice Withdraws the entire balance of a token from Aave V3 back to the vault
      * @dev Used during the distribution phase to pull all funds out of Aave before sending to beneficiaries
@@ -39,7 +48,6 @@ interface IYieldAdapter {
      * @return The total amount withdrawn including all accrued yield
      */
     function withdrawAll(address token) external returns (uint256);
-
 
     /*//////////////////////////////////////////////////////////////
                             VIEW FUNCTIONS
@@ -53,12 +61,11 @@ interface IYieldAdapter {
      */
     function getAaveBalance(address token) external view returns (uint256);
 
-
-     /**
+    /**
      * @notice Checks whether a specific token is supported by Aave V3 on the current chain
      * @param token The ERC-20 token address to check
      * @return True if the token can be supplied to Aave, false otherwise
      */
-    
+
     function isTokenSupported(address token) external view returns (bool);
 }

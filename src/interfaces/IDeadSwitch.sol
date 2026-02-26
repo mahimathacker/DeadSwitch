@@ -96,9 +96,9 @@ interface IDeadSwitch {
     }
 
     struct VaultConfig {
-        uint256 checkInInterval; 
-        uint256 warningPeriod;   
-        uint256 gracePeriod;    
+        uint256 checkInInterval;
+        uint256 warningPeriod;
+        uint256 gracePeriod;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -110,7 +110,9 @@ interface IDeadSwitch {
     event Withdrawn(address indexed token, uint256 amount);
     event StateChanged(VaultState indexed previousState, VaultState indexed newState, uint256 timestamp);
     event WillUpdated(uint256 beneficiaryCount, uint256 effectiveAt);
-    event Distributed(address indexed beneficiary, address indexed token, uint256 amount, DistributionType distributionType);
+    event Distributed(
+        address indexed beneficiary, address indexed token, uint256 amount, DistributionType distributionType
+    );
     event DepositedToYield(address indexed token, uint256 amount);
     event WithdrawnFromYield(address indexed token, uint256 amount);
     event DistributionCancelled(uint256 timestamp);
