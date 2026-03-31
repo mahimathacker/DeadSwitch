@@ -5,10 +5,8 @@ pragma solidity ^0.8.28;
 /// @notice Handles linear streaming of funds to beneficiaries over configurable durations
 /// @dev Similar to Sablier but purpose-built for inheritance distribution
 
-
 interface IStreamEngine {
-
-     /*//////////////////////////////////////////////////////////////
+    /*//////////////////////////////////////////////////////////////
                                 ERRORS
     //////////////////////////////////////////////////////////////*/
 
@@ -18,12 +16,9 @@ interface IStreamEngine {
     error StreamAlreadyCompleted();
     error NotRecipient();
 
-
-
     /*//////////////////////////////////////////////////////////////
                               STRUCTS
     //////////////////////////////////////////////////////////////*/
-
 
     struct Stream {
         address recipient;
@@ -35,12 +30,17 @@ interface IStreamEngine {
         bool active;
     }
 
-
     /*//////////////////////////////////////////////////////////////
                               EVENTS
     //////////////////////////////////////////////////////////////*/
 
-    event StreamCreated(uint256 indexed streamId, address indexed recipient, address indexed token, uint256 totalAmount, uint256 duration);
+    event StreamCreated(
+        uint256 indexed streamId,
+        address indexed recipient,
+        address indexed token,
+        uint256 totalAmount,
+        uint256 duration
+    );
     event StreamClaimed(uint256 indexed streamId, address indexed recipient, uint256 amount);
     event StreamCompleted(uint256 indexed streamId);
 
@@ -59,12 +59,9 @@ interface IStreamEngine {
      * @return streamId The unique identifier for the newly created stream
      */
 
-    function createStream(
-        address recipient,
-        address token,
-        uint256 totalAmount,
-        uint256 duration
-    ) external returns (uint256 streamId);
+    function createStream(address recipient, address token, uint256 totalAmount, uint256 duration)
+        external
+        returns (uint256 streamId);
 
     /**
      * @notice Allows a beneficiary to claim their vested tokens from an active stream
@@ -76,13 +73,11 @@ interface IStreamEngine {
 
     function claim(uint256 streamId) external returns (uint256 amount);
 
-
-
     /*//////////////////////////////////////////////////////////////
                             VIEW FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-     /**
+    /**
      * @notice Returns the full details of a specific payment stream
      * @param streamId The unique identifier of the stream
      * @return The Stream struct containing all stream details
@@ -90,9 +85,7 @@ interface IStreamEngine {
 
     function getStream(uint256 streamId) external view returns (Stream memory);
 
-
-
-     /**
+    /**
      * @notice Returns the amount of tokens currently available for a beneficiary to claim from a stream
      * @dev Calculates linear vesting: (elapsed / duration) * totalAmount - claimedAmount
      * @param streamId The unique identifier of the stream
@@ -107,7 +100,6 @@ interface IStreamEngine {
      */
 
     function getStreamsByRecipient(address recipient) external view returns (uint256[] memory);
-
 
     /**
      * @notice Returns the total number of streams that have been created across all beneficiaries

@@ -8,7 +8,6 @@ import {IDeadSwitch} from "./IDeadSwitch.sol";
 /// @dev Will changes have a 48-hour timelock to prevent deathbed manipulation
 
 interface IWillRegistry {
-
     /*//////////////////////////////////////////////////////////////
                                 ERRORS
     //////////////////////////////////////////////////////////////*/
@@ -28,9 +27,9 @@ interface IWillRegistry {
     event WillActivated(uint256 beneficiaryCount);
     event WillProposalCancelled();
 
-     /*//////////////////////////////////////////////////////////////
-                              EXTERNAL FUNCTIONS
-      //////////////////////////////////////////////////////////////*/
+    /*//////////////////////////////////////////////////////////////
+                             EXTERNAL FUNCTIONS
+     //////////////////////////////////////////////////////////////*/
 
     /**
      * @notice Proposes a new will configuration, starting a 48-hour timelock before it becomes active
@@ -40,16 +39,15 @@ interface IWillRegistry {
      * @param beneficiaries The new array of beneficiary configurations
      */
 
-      function proposeWill(IDeadSwitch.Beneficiary[] calldata beneficiaries) external;
+    function proposeWill(IDeadSwitch.Beneficiary[] calldata beneficiaries) external;
 
-     /**
+    /**
      * @notice Activates a pending will proposal after the 48-hour timelock has passed
      * @dev Anyone can call this once the timelock expires
      *      Replaces the current active will with the proposed one
      */
 
-      function activeWill() external;
-
+    function activeWill() external;
 
     /**
      * @notice Cancels a pending will proposal before it becomes active
@@ -62,7 +60,6 @@ interface IWillRegistry {
                             VIEW FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    
     /**
      * @notice Returns the current active will with all beneficiary configurations
      * @return The array of active Beneficiary structs
@@ -76,8 +73,10 @@ interface IWillRegistry {
      * @return effectiveAt The Unix timestamp when the proposal can be activated
      */
 
-    function getPendingWill() external view returns (IDeadSwitch.Beneficiary[] memory beneficiaries, uint256 effectiveAt);
-
+    function getPendingWill()
+        external
+        view
+        returns (IDeadSwitch.Beneficiary[] memory beneficiaries, uint256 effectiveAt);
 
     /**
      * @notice Checks whether there is a pending will proposal waiting for its timelock to expire
@@ -92,5 +91,4 @@ interface IWillRegistry {
      */
 
     function getTimelockDuration() external pure returns (uint256);
-
 }

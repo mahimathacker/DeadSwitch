@@ -113,6 +113,7 @@ interface IDeadSwitch {
     event Distributed(
         address indexed beneficiary, address indexed token, uint256 amount, DistributionType distributionType
     );
+    event ConfigUpdated(uint48 checkInInterval, uint48 warningPeriod, uint48 gracePeriod);
     event DepositedToYield(address indexed token, uint256 amount);
     event WithdrawnFromYield(address indexed token, uint256 amount);
     event DistributionCancelled(uint256 timestamp);
@@ -225,6 +226,16 @@ interface IDeadSwitch {
      */
 
     function chainstreamDistribution(address token) external;
+    /**
+     * @notice Allows the owner to update the vault's timing configuration
+     * @dev Only callable in Active state by the owner
+     *      Cannot set check-in interval below 7 days or above 365 days
+     * @param checkInInterval New check-in interval in seconds
+     * @param warningPeriod New warning period in seconds
+     * @param gracePeriod New grace period in seconds
+     */
+
+    function updateConfig(uint48 checkInInterval, uint48 warningPeriod, uint48 gracePeriod) external;
 
     /*//////////////////////////////////////////////////////////////
                             VIEW FUNCTIONS
