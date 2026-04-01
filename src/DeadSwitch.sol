@@ -38,7 +38,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
  @notice A dead man's switch vault with Aave V3 yield and conditional distribution to beneficiaries
  @dev Uses packed storage (31 bytes in Slot 0) and transient storage reentrancy guard
 */
-contract DeadSwitch is IDeadSwitch, ReentrancyGuardTransient  {
+contract DeadSwitch is  IDeadSwitch, Ownable, ReentrancyGuardTransient  {
    using SafeERC20 for IERC20;
 
 uint256 private constant MAX_BENEFICIARIES = 10;
@@ -70,6 +70,24 @@ address[] private s_supportedTokens;
 mapping(address => bool) private s_tokenExists;
 
 
+    modifier  onlyInState(VaultState requiredState) {
+        if (s_state != requiredState) {
+            revert WrongState(s_state, requiredState);
+        }
+        _;
+    }
+
+    /**
+     * @notice Deploys a new DeadSwitch vault with the given owner and timing configuration
+     * @dev Sets all immutables and initializes Slot 0 storage with Active state and current timestamp
+     * @param owner The wallet address that will own and control this vault
+     * @param yieldAdapter The deployed YieldAdapter contract address for Aave V3 integration
+     * @param willRegistry The deployed WillRegistry contract address for beneficiary management
+     * @param streamEngine The deployed StreamEngine contract address for time-released payments
+     * @param checkInInterval How often the owner must check in (seconds, min 7 days, max 365 days)
+     * @param warningPeriod How long the warning state lasts after a missed check-in (seconds)
+     * @param gracePeriod How long the final grace period lasts before distribution (seconds)
+     */
 
     constructor (
         address owner,
@@ -89,8 +107,52 @@ mapping(address => bool) private s_tokenExists;
         if (checkInInterval > MAX_CHECKIN_INTERVAL) revert InvalidConfig();
         if (warningPeriod == 0) revert InvalidConfig();
         if (gracePeriod == 0) revert InvalidConfig();
+    
+        i_yieldAdapter = IYieldAdapter(yieldAdapter);
+        i_willRegistry = IWillRegistry(willRegistry);
+        i_streamEngine = IStreamEngine(streamEngine);
+
+        s_state = VaultState.Active;
+        s_lastCheckIn = uint48(block.timestamp);
+        s_stateChangedAt = uint48(block.timestamp);
+        s_checkInInterval = checkInInterval;
+        s_warningPeriod = warningPeriod;
+        s_gracePeriod = gracePeriod;
     }
-    
-    
+
+    receive() external payable {}
+
+function checkIn() external onlyOwner {
+    VaultState  currentState = s_state;
+
+    //Wrong state: you're in Distributing, but this function requires Active
+
+     if (currentState == VaultState.Distributing || currentState == VaultState.Completed) {
+            revert WrongState(currentState, VaultState.Active);
+
+        // If not already Active, transition back to Active
+        if (currentState != VaultState.Active) {
+            s_state = VaultState.Active;
+            emit StateChanged(currentState, VaultState.Active, block.timestamp);
+        }
+        }
+
+        s_lastCheckIn = uint48(block.timestamp);
+        s_stateChangedAt = uint48(block.timestamp);
+
+        emit CheckedIn(i_owner, block.timestamp);
+} 
+
+ function depositETH() external payable onlyOwner onlyInState(VaultState.Active) nonReentrant {
+        if (msg.value == 0) revert ZeroAmount();
+
+        // TODO: Wrap ETH to WETH and deposit to Aave via i_yieldAdapter
+        // For now, vault just holds ETH
+
+        emit Deposited(address(0), msg.value);
+    }
+
 
 }
+
+
