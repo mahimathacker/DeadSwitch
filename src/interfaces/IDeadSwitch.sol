@@ -191,7 +191,9 @@ interface IDeadSwitch {
      */
 
     function triggerGracePeriod() external;
-
+    function triggerWarning() external;
+    function triggerGracePeriod() external;
+    function executeDistribution() external;
     /**
      * @notice Executes the full distribution of all vault assets to beneficiaries according to the will
      * @dev Called by Chainlink Automation when gracePeriod has passed
