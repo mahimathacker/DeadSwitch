@@ -140,7 +140,7 @@ function checkIn() external onlyOwner {
         s_lastCheckIn = uint48(block.timestamp);
         s_stateChangedAt = uint48(block.timestamp);
 
-        emit CheckedIn(i_owner, block.timestamp);
+        emit CheckedIn(msg.sender, block.timestamp);
 } 
 
  function depositETH() external payable onlyOwner onlyInState(VaultState.Active) nonReentrant {
