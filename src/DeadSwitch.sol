@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT 
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 // Layout of Contract:
@@ -22,57 +22,53 @@ pragma solidity ^0.8.28;
 // private
 // view & pure functions
 
-
-import { IDeadSwitch} from "./interfaces/IDeadSwitch.sol";
-import { IYieldAdapter} from "./interfaces/IYieldAdapter.sol";
-import { IWillRegistry } from "./interfaces/IWillRegistry.sol";
-import { IStreamEngine} from "./interfaces/IStreamEngine.sol";
-import { IWETH } from "./interfaces/IWETH.sol";
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import { ReentrancyGuardTransient } from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
+import {IDeadSwitch} from "./interfaces/IDeadSwitch.sol";
+import {IYieldAdapter} from "./interfaces/IYieldAdapter.sol";
+import {IWillRegistry} from "./interfaces/IWillRegistry.sol";
+import {IStreamEngine} from "./interfaces/IStreamEngine.sol";
+import {IWETH} from "./interfaces/IWETH.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-/** 
- @title DeadSwitch - On-Chain Crypto Inheritance Vault
- @author DeadSwitch Protocol
- @notice A dead man's switch vault with Aave V3 yield and conditional distribution to beneficiaries
- @dev Uses packed storage (31 bytes in Slot 0) and transient storage reentrancy guard
-*/
-contract DeadSwitch is  IDeadSwitch, Ownable, ReentrancyGuardTransient  {
+/**
+ *  @title DeadSwitch - On-Chain Crypto Inheritance Vault
+ *  @author DeadSwitch Protocol
+ *  @notice A dead man's switch vault with Aave V3 yield and conditional distribution to beneficiaries
+ *  @dev Uses packed storage (31 bytes in Slot 0) and transient storage reentrancy guard
+ */
+contract DeadSwitch is IDeadSwitch, Ownable, ReentrancyGuardTransient {
+    using SafeERC20 for IERC20;
+    uint256 private constant MAX_BENEFICIARIES = 10;
+    uint256 private constant MIN_CHECKIN_INTERVAL = 7 days;
+    uint256 private constant MAX_CHECKIN_INTERVAL = 365 days;
+    uint256 private constant BASIS_POINTS = 10_000;
 
-   using SafeERC20 for IERC20;
-uint256 private constant MAX_BENEFICIARIES = 10;
-uint256 private constant MIN_CHECKIN_INTERVAL = 7 days;
-uint256 private constant MAX_CHECKIN_INTERVAL = 365 days;
-uint256 private constant BASIS_POINTS = 10_000;
+    // Immutables
 
+    address private immutable vault;
+    IYieldAdapter private immutable i_yieldAdapter;
+    IWillRegistry private immutable i_willRegistry;
+    IStreamEngine private immutable i_streamEngine;
+    IWETH private immutable i_weth;
 
-// Immutables
+    // Slot 0: Hot slot - ALL packed into 31 bytes, single SLOAD/SSTORE
 
-address private immutable vault;
-IYieldAdapter private immutable i_yieldAdapter;
-IWillRegistry private immutable i_willRegistry;
-IStreamEngine private immutable i_streamEngine;
-IWETH private immutable i_weth;
+    VaultState private s_state;
+    uint48 private s_lastCheckIn;
+    uint48 private s_stateChangedAt;
+    uint48 private s_checkInInterval;
+    uint48 private s_warningPeriod;
+    uint48 private s_gracePeriod;
 
-// Slot 0: Hot slot - ALL packed into 31 bytes, single SLOAD/SSTORE
+    // Slot 1: Dynamic array of supported token addresses
+    address[] private s_supportedTokens;
 
-VaultState private s_state;
-uint48 private s_lastCheckIn;
-uint48 private s_stateChangedAt; 
-uint48 private s_checkInInterval;
-uint48 private s_warningPeriod;
-uint48 private s_gracePeriod;
+    // Slot 2: Quick lookup to avoid duplicate token entries
+    mapping(address => bool) private s_tokenExists;
 
-// Slot 1: Dynamic array of supported token addresses
-address[] private s_supportedTokens;
-
-// Slot 2: Quick lookup to avoid duplicate token entries
-mapping(address => bool) private s_tokenExists;
-
-
-    modifier  onlyInState(VaultState requiredState) {
+    modifier onlyInState(VaultState requiredState) {
         if (s_state != requiredState) {
             revert WrongState(s_state, requiredState);
         }
@@ -91,7 +87,7 @@ mapping(address => bool) private s_tokenExists;
      * @param gracePeriod How long the final grace period lasts before distribution (seconds)
      */
 
-    constructor (
+    constructor(
         address owner,
         address yieldAdapter,
         address willRegistry,
@@ -100,7 +96,6 @@ mapping(address => bool) private s_tokenExists;
         uint48 warningPeriod,
         uint48 gracePeriod
     ) Ownable(owner) {
-
         if (owner == address(0)) revert NotOwner();
         if (yieldAdapter == address(0)) revert InvalidConfig();
         if (willRegistry == address(0)) revert InvalidConfig();
@@ -109,7 +104,7 @@ mapping(address => bool) private s_tokenExists;
         if (checkInInterval > MAX_CHECKIN_INTERVAL) revert InvalidConfig();
         if (warningPeriod == 0) revert InvalidConfig();
         if (gracePeriod == 0) revert InvalidConfig();
-    
+
         i_yieldAdapter = IYieldAdapter(yieldAdapter);
         i_willRegistry = IWillRegistry(willRegistry);
         i_streamEngine = IStreamEngine(streamEngine);
@@ -124,54 +119,57 @@ mapping(address => bool) private s_tokenExists;
 
     receive() external payable {}
 
-
     /*///////////////////////////////////////////////////////////////////
                            EXTERNAL FUNCTIONS
     ///////////////////////////////////////////////////////////////////*/
 
-function checkIn() external onlyOwner {
-    VaultState  currentState = s_state;
+    function checkIn() external onlyOwner {
+        VaultState currentState = s_state;
 
-    //Wrong state: you're in Distributing, but this function requires Active
+        //Wrong state: you're in Distributing, but this function requires Active
 
-     if (currentState == VaultState.Distributing || currentState == VaultState.Completed) {
+        if (currentState == VaultState.Distributing || currentState == VaultState.Completed) {
             revert WrongState(currentState, VaultState.Active);
 
-        // If not already Active, transition back to Active
-        if (currentState != VaultState.Active) {
-            s_state = VaultState.Active;
-            emit StateChanged(currentState, VaultState.Active, block.timestamp);
-        }
+            // If not already Active, transition back to Active
+            if (currentState != VaultState.Active) {
+                s_state = VaultState.Active;
+                emit StateChanged(currentState, VaultState.Active, block.timestamp);
+            }
         }
 
         s_lastCheckIn = uint48(block.timestamp);
         s_stateChangedAt = uint48(block.timestamp);
 
         emit CheckedIn(msg.sender, block.timestamp);
-} 
-
-function depositETH() external payable onlyOwner onlyInState(VaultState.Active) nonReentrant {
-    if (msg.value == 0) revert ZeroAmount();
-
-    // Wrap ETH → WETH
-    i_weth.deposit{value: msg.value}();
-
-    // Track WETH like any ERC-20
-    if (!s_tokenExists[address(i_weth)]) {
-        s_supportedTokens.push(address(i_weth));
-        s_tokenExists[address(i_weth)] = true;
     }
 
-    // Deposit WETH to Aave
-    IERC20(address(i_weth)).safeIncreaseAllowance(address(i_yieldAdapter), msg.value);
-    i_yieldAdapter.depositToAave(address(i_weth), msg.value);
+    function depositETH() external payable onlyOwner onlyInState(VaultState.Active) nonReentrant {
+        if (msg.value == 0) revert ZeroAmount();
 
-    emit Deposited(address(i_weth), msg.value);
-    emit DepositedToYield(address(i_weth), msg.value);
-}
+        // Wrap ETH → WETH
+        i_weth.deposit{value: msg.value}();
 
+        // Track WETH like any ERC-20
+        if (!s_tokenExists[address(i_weth)]) {
+            s_supportedTokens.push(address(i_weth));
+            s_tokenExists[address(i_weth)] = true;
+        }
 
-function depositToken(address token, uint256 amount) external onlyOwner onlyInState(VaultState.Active) nonReentrant {
+        // Deposit WETH to Aave
+        IERC20(address(i_weth)).safeIncreaseAllowance(address(i_yieldAdapter), msg.value);
+        i_yieldAdapter.depositToAave(address(i_weth), msg.value);
+
+        emit Deposited(address(i_weth), msg.value);
+        emit DepositedToYield(address(i_weth), msg.value);
+    }
+
+    function depositToken(address token, uint256 amount)
+        external
+        onlyOwner
+        onlyInState(VaultState.Active)
+        nonReentrant
+    {
         if (amount == 0) revert ZeroAmount();
         if (token == address(0)) revert UnsupportedToken();
 
@@ -192,27 +190,29 @@ function depositToken(address token, uint256 amount) external onlyOwner onlyInSt
         emit DepositedToYield(token, amount);
     }
 
-function withdrawETH(uint256 amount) external onlyOwner onlyInState(VaultState.Active) nonReentrant {
-    if (amount == 0) revert ZeroAmount();
+    function withdrawETH(uint256 amount) external onlyOwner onlyInState(VaultState.Active) nonReentrant {
+        if (amount == 0) revert ZeroAmount();
 
-    // Pull WETH from Aave
-    uint256 withdrawn = i_yieldAdapter.withdrawFromAave(address(i_weth), amount);
+        // Pull WETH from Aave
+        uint256 withdrawn = i_yieldAdapter.withdrawFromAave(address(i_weth), amount);
 
-    // Unwrap WETH → ETH
-    i_weth.withdraw(withdrawn);
+        // Unwrap WETH → ETH
+        i_weth.withdraw(withdrawn);
 
-    // Send ETH to owner
-    (bool success,) = msg.sender.call{value: withdrawn}("");
-    if (!success) revert ETHTransferFailed();
+        // Send ETH to owner
+        (bool success,) = msg.sender.call{value: withdrawn}("");
+        if (!success) revert ETHTransferFailed();
 
-    emit Withdrawn(address(i_weth), withdrawn);
-    emit WithdrawnFromYield(address(i_weth), withdrawn);
-}
+        emit Withdrawn(address(i_weth), withdrawn);
+        emit WithdrawnFromYield(address(i_weth), withdrawn);
+    }
 
-function withdrawToken(
-        address token,
-        uint256 amount
-    ) external onlyOwner onlyInState(VaultState.Active) nonReentrant {
+    function withdrawToken(address token, uint256 amount)
+        external
+        onlyOwner
+        onlyInState(VaultState.Active)
+        nonReentrant
+    {
         if (amount == 0) revert ZeroAmount();
         if (token == address(0)) revert UnsupportedToken();
 
@@ -226,7 +226,7 @@ function withdrawToken(
         emit WithdrawnFromYield(token, withdrawn);
     }
 
-function setWill(Beneficiary[] calldata beneficiaries) external onlyOwner onlyInState(VaultState.Active) {
+    function setWill(Beneficiary[] calldata beneficiaries) external onlyOwner onlyInState(VaultState.Active) {
         if (beneficiaries.length == 0) revert NoBeneficiaries();
         if (beneficiaries.length > MAX_BENEFICIARIES) revert InvalidConfig();
 
@@ -234,7 +234,9 @@ function setWill(Beneficiary[] calldata beneficiaries) external onlyOwner onlyIn
         uint256 totalPercentage;
         for (uint256 i; i < beneficiaries.length;) {
             totalPercentage += beneficiaries[i].percentage;
-            unchecked { ++i; }
+            unchecked {
+                ++i;
+            }
         }
         if (totalPercentage != BASIS_POINTS) revert InvalidPercentages();
 
@@ -244,11 +246,11 @@ function setWill(Beneficiary[] calldata beneficiaries) external onlyOwner onlyIn
         emit WillUpdated(beneficiaries.length, block.timestamp + i_willRegistry.getTimelockDuration());
     }
 
- function updateConfig(
-        uint48 checkInInterval,
-        uint48 warningPeriod,
-        uint48 gracePeriod
-    ) external onlyOwner onlyInState(VaultState.Active) {
+    function updateConfig(uint48 checkInInterval, uint48 warningPeriod, uint48 gracePeriod)
+        external
+        onlyOwner
+        onlyInState(VaultState.Active)
+    {
         if (checkInInterval < MIN_CHECKIN_INTERVAL) revert InvalidConfig();
         if (checkInInterval > MAX_CHECKIN_INTERVAL) revert InvalidConfig();
         if (warningPeriod == 0) revert InvalidConfig();
@@ -261,7 +263,7 @@ function setWill(Beneficiary[] calldata beneficiaries) external onlyOwner onlyIn
         emit ConfigUpdated(checkInInterval, warningPeriod, gracePeriod);
     }
 
-     function cancelDistribution() external onlyOwner onlyInState(VaultState.GracePeriod) {
+    function cancelDistribution() external onlyOwner onlyInState(VaultState.GracePeriod) {
         s_state = VaultState.Active;
         s_lastCheckIn = uint48(block.timestamp);
         s_stateChangedAt = uint48(block.timestamp);
@@ -273,18 +275,16 @@ function setWill(Beneficiary[] calldata beneficiaries) external onlyOwner onlyIn
     function triggerWarning() external onlyInState(VaultState.Active) {
         _triggerWarning();
     }
-     
-     function executeDistribution() external onlyInState(VaultState.GracePeriod) nonReentrant {
-        _executeDistribution();
-     }
 
-     function triggerGracePeriod() external onlyInState(VaultState.Warning) {
+    function executeDistribution() external onlyInState(VaultState.GracePeriod) nonReentrant {
+        _executeDistribution();
+    }
+
+    function triggerGracePeriod() external onlyInState(VaultState.Warning) {
         _triggerGracePeriod();
-     }
-   
-     function checkUpKeep(
-        bytes calldata
-    ) external view returns (bool upkeepNeeded, bytes memory performData) {
+    }
+
+    function checkUpKeep(bytes calldata) external view returns (bool upkeepNeeded, bytes memory performData) {
         VaultState currentState = s_state;
 
         if (currentState == VaultState.Active) {
@@ -304,7 +304,7 @@ function setWill(Beneficiary[] calldata beneficiaries) external onlyOwner onlyIn
         return (false, "");
     }
 
- function performUpKeep(bytes calldata performData) external {
+    function performUpKeep(bytes calldata performData) external {
         uint8 action = abi.decode(performData, (uint8));
 
         if (action == 0) {
@@ -315,7 +315,8 @@ function setWill(Beneficiary[] calldata beneficiaries) external onlyOwner onlyIn
             _executeDistribution();
         }
     }
-function claimStream(address token) external {
+
+    function claimStream(address token) external {
         uint256[] memory streamIds = i_streamEngine.getStreamsByRecipient(msg.sender);
 
         bool claimed;
@@ -325,12 +326,13 @@ function claimStream(address token) external {
                 i_streamEngine.claim(streamIds[i]);
                 claimed = true;
             }
-            unchecked { ++i; }
+            unchecked {
+                ++i;
+            }
         }
 
         if (!claimed) revert NotBeneficiary();
     }
-
 
     /*///////////////////////////////////////////////////////////////////
                            VIEW FUNCTIONS
@@ -340,23 +342,22 @@ function claimStream(address token) external {
         return s_state;
     }
 
-     function getOwner() external view returns (address) {
+    function getOwner() external view returns (address) {
         return msg.sender;
     }
 
     function getConfig() external view returns (VaultConfig memory) {
-        return VaultConfig({
-            checkInInterval: s_checkInInterval,
-            warningPeriod: s_warningPeriod,
-            gracePeriod: s_gracePeriod
-        });
+        return
+            VaultConfig({
+                checkInInterval: s_checkInInterval, warningPeriod: s_warningPeriod, gracePeriod: s_gracePeriod
+            });
     }
 
-     function getLastCheckIn() external view returns (uint256) {
+    function getLastCheckIn() external view returns (uint256) {
         return s_lastCheckIn;
     }
 
-     function getTimeUntilExpiry() external view returns (uint256) {
+    function getTimeUntilExpiry() external view returns (uint256) {
         uint256 deadline = uint256(s_lastCheckIn) + uint256(s_checkInInterval);
         if (block.timestamp >= deadline) return 0;
         return deadline - block.timestamp;
@@ -369,7 +370,7 @@ function claimStream(address token) external {
         return idle + inAave;
     }
 
-     function getWill() external view returns (Beneficiary[] memory) {
+    function getWill() external view returns (Beneficiary[] memory) {
         return i_willRegistry.getActiveWill();
     }
 
@@ -382,30 +383,30 @@ function claimStream(address token) external {
             if (stream.token == token && stream.active) {
                 total += i_streamEngine.getClaimable(streamIds[i]);
             }
-            unchecked { ++i; }
+            unchecked {
+                ++i;
+            }
         }
 
         return total;
     }
 
+    /*////////////////////////////////////////////////////////////////
+                               INTERNAL FUNCTIONS (
+    ///////////////////////////////////////////////////////////////////*/
 
+    function _triggerWarning() internal {
+        if (block.timestamp < s_lastCheckIn + s_checkInInterval) {
+            revert CheckInNotExpired();
+        }
 
-/*////////////////////////////////////////////////////////////////
-                           INTERNAL FUNCTIONS (
-///////////////////////////////////////////////////////////////////*/
+        s_state = VaultState.Warning;
+        s_stateChangedAt = uint48(block.timestamp);
 
-function _triggerWarning() internal {
-    if (block.timestamp < s_lastCheckIn + s_checkInInterval) {
-        revert CheckInNotExpired();
+        emit StateChanged(VaultState.Active, VaultState.Warning, block.timestamp);
     }
 
-    s_state = VaultState.Warning;
-    s_stateChangedAt = uint48(block.timestamp);
-
-    emit StateChanged(VaultState.Active, VaultState.Warning, block.timestamp);
-}
-
-function _triggerGracePeriod() internal onlyInState(VaultState.Warning) {
+    function _triggerGracePeriod() internal onlyInState(VaultState.Warning) {
         if (block.timestamp < s_stateChangedAt + s_warningPeriod) {
             revert WarningNotExpired();
         }
@@ -416,7 +417,7 @@ function _triggerGracePeriod() internal onlyInState(VaultState.Warning) {
         emit StateChanged(VaultState.Warning, VaultState.GracePeriod, block.timestamp);
     }
 
-function _executeDistribution() internal onlyInState(VaultState.GracePeriod) nonReentrant {
+    function _executeDistribution() internal onlyInState(VaultState.GracePeriod) nonReentrant {
         if (block.timestamp < s_stateChangedAt + s_gracePeriod) {
             revert GracePeriodNotExpired();
         }
@@ -431,7 +432,9 @@ function _executeDistribution() internal onlyInState(VaultState.GracePeriod) non
         for (uint256 i; i < tokenCount;) {
             address token = s_supportedTokens[i];
             i_yieldAdapter.withdrawAll(token);
-            unchecked { ++i; }
+            unchecked {
+                ++i;
+            }
         }
 
         // --- Interactions: Distribute per will ---
@@ -454,21 +457,20 @@ function _executeDistribution() internal onlyInState(VaultState.GracePeriod) non
                         } else {
                             // Streamed: send to StreamEngine and create stream
                             IERC20(token).safeTransfer(address(i_streamEngine), share);
-                            i_streamEngine.createStream(
-                                will[b].beneficiary,
-                                token,
-                                share,
-                                will[b].streamDuration
-                            );
+                            i_streamEngine.createStream(will[b].beneficiary, token, share, will[b].streamDuration);
                             emit Distributed(will[b].beneficiary, token, share, DistributionType.Streamed);
                         }
                     }
 
-                    unchecked { ++b; }
+                    unchecked {
+                        ++b;
+                    }
                 }
             }
 
-            unchecked { ++t; }
+            unchecked {
+                ++t;
+            }
         }
 
         // --- Final state ---
@@ -476,5 +478,4 @@ function _executeDistribution() internal onlyInState(VaultState.GracePeriod) non
         s_stateChangedAt = uint48(block.timestamp);
         emit StateChanged(VaultState.Distributing, VaultState.Completed, block.timestamp);
     }
-
 }

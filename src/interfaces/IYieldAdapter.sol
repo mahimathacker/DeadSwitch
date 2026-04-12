@@ -8,7 +8,9 @@ interface IYieldAdapter {
 
     error OnlyVault();
     error TokenNotSupported();
-    error AaveOperationFailed();
+    error ZeroAmount();
+
+
 
     /*//////////////////////////////////////////////////////////////
                                    EVENTS
@@ -69,7 +71,7 @@ interface IYieldAdapter {
 
     function isTokenSupported(address token) external view returns (bool);
 
-     /**
+    /**
      * @notice Returns the vault address that this adapter serves
      * @return The DeadSwitch vault contract address
      */
