@@ -83,13 +83,13 @@ interface IDeadSwitch {
 
     /**
      *  @notice Struct representing a beneficiary's inheritance details
-     *  @param beneficiaryAddress The address of the beneficiary
+     *  @param beneficiary The address of the beneficiary
      *  @param percentage The percentage of the total inheritance allocated to this beneficiary (out of 100)
      *  @param distributionType The method of distribution for this beneficiary (Instant or Streamed)
      *  @param streamDuration If distributionType is Streamed, the duration over which the inheritance will
      */
     struct Beneficiary {
-        address beneficiaryAddress;
+        address beneficiary;
         uint16 percentage;
         DistributionType distributionType;
         uint256 streamDuration;
@@ -259,7 +259,7 @@ interface IDeadSwitch {
      * @return The VaultConfig struct containing all interval settings
      */
 
-    function getConfig() external view returns (Beneficiary[] memory);
+    function getConfig() external view returns (VaultConfig memory);
 
     /**
      * @notice Returns the timestamp of the owner's most recent check-in
@@ -278,7 +278,7 @@ interface IDeadSwitch {
     /**
      * @notice Returns the total vault balance for a specific token, including yield earned in Aave
      * @dev Combines both idle balance held in the vault and the balance deposited in Aave
-     * @param token The token address to check (address(0) for ETH)
+     * @param token The token address
      * @return The total balance including accrued yield from Aave
      */
 
