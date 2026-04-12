@@ -123,6 +123,9 @@ contract DeadSwitch is IDeadSwitch, Ownable, ReentrancyGuardTransient {
                            EXTERNAL FUNCTIONS
     ///////////////////////////////////////////////////////////////////*/
 
+// aderyn-ignore-next-line(centralization-risk)
+// DeadSwitch is a personal vault — owner is the sole user, not an admin.
+// Owner can only manage their own funds. They cannot affect other users.
     function checkIn() external onlyOwner {
         VaultState currentState = s_state;
 
@@ -130,19 +133,20 @@ contract DeadSwitch is IDeadSwitch, Ownable, ReentrancyGuardTransient {
 
         if (currentState == VaultState.Distributing || currentState == VaultState.Completed) {
             revert WrongState(currentState, VaultState.Active);
-
+        }
             // If not already Active, transition back to Active
             if (currentState != VaultState.Active) {
                 s_state = VaultState.Active;
                 emit StateChanged(currentState, VaultState.Active, block.timestamp);
             }
-        }
 
         s_lastCheckIn = uint48(block.timestamp);
         s_stateChangedAt = uint48(block.timestamp);
 
         emit CheckedIn(msg.sender, block.timestamp);
     }
+
+    // aderyn-ignore-next-line(centralization-risk)
 
     function depositETH() external payable onlyOwner onlyInState(VaultState.Active) nonReentrant {
         if (msg.value == 0) revert ZeroAmount();
@@ -166,9 +170,9 @@ contract DeadSwitch is IDeadSwitch, Ownable, ReentrancyGuardTransient {
 
     function depositToken(address token, uint256 amount)
         external
+        nonReentrant
         onlyOwner
         onlyInState(VaultState.Active)
-        nonReentrant
     {
         if (amount == 0) revert ZeroAmount();
         if (token == address(0)) revert UnsupportedToken();
@@ -209,9 +213,9 @@ contract DeadSwitch is IDeadSwitch, Ownable, ReentrancyGuardTransient {
 
     function withdrawToken(address token, uint256 amount)
         external
+        nonReentrant
         onlyOwner
         onlyInState(VaultState.Active)
-        nonReentrant
     {
         if (amount == 0) revert ZeroAmount();
         if (token == address(0)) revert UnsupportedToken();
