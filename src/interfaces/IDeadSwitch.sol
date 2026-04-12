@@ -224,7 +224,7 @@ interface IDeadSwitch {
      * @param token The token address to claim from the stream
      */
 
-    function chainstreamDistribution(address token) external;
+    function claimStream(address token) external;
     /**
      * @notice Allows the owner to update the vault's timing configuration
      * @dev Only callable in Active state by the owner

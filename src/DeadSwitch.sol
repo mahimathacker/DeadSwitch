@@ -274,10 +274,15 @@ function setWill(Beneficiary[] calldata beneficiaries) external onlyOwner onlyIn
         _triggerWarning();
     }
      
-    
+     function executeDistribution() external onlyInState(VaultState.GracePeriod) nonReentrant {
+        _executeDistribution();
+     }
 
+     function triggerGracePeriod() external onlyInState(VaultState.Warning) {
+        _triggerGracePeriod();
+     }
    
-     function checkUpkeep(
+     function checkUpKeep(
         bytes calldata
     ) external view returns (bool upkeepNeeded, bytes memory performData) {
         VaultState currentState = s_state;
@@ -299,7 +304,7 @@ function setWill(Beneficiary[] calldata beneficiaries) external onlyOwner onlyIn
         return (false, "");
     }
 
- function performUpkeep(bytes calldata performData) external {
+ function performUpKeep(bytes calldata performData) external {
         uint8 action = abi.decode(performData, (uint8));
 
         if (action == 0) {
