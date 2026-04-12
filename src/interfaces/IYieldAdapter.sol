@@ -15,7 +15,7 @@ interface IYieldAdapter {
        //////////////////////////////////////////////////////////////*/
 
     event SuppliedToAave(address indexed token, uint256 amount);
-    event WithdrawnFromAave(address indexed token, uint256 amount);
+    event WithdrawnFromAave(address indexed token, uint256 amount, address indexed to);
 
     /*//////////////////////////////////////////////////////////////
                               EXTERNAL FUNCTIONS
@@ -68,4 +68,10 @@ interface IYieldAdapter {
      */
 
     function isTokenSupported(address token) external view returns (bool);
+
+     /**
+     * @notice Returns the vault address that this adapter serves
+     * @return The DeadSwitch vault contract address
+     */
+    function getVault() external view returns (address);
 }
